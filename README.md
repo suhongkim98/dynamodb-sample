@@ -10,8 +10,14 @@ aws-cli 로컬 구성 필요
 
 # 시작하기
 
+## 로컬 dynamodb 도커 컨테이너 실행
 ```bash
 docker compose up -d
+```
+
+## swagger 접근
+```
+http://localhost:8080/docs/index.html
 ```
 
 # 개요
@@ -19,21 +25,6 @@ docker compose up -d
 지쿠터, 카카오바이크 같은 전기자전거 대여 서비스를 간단하게 다이나모 디비로 구현해본다.
 
 # 테이블 생성
-
-전기자전거 집합체 테이블 생성
-
-```
-aws dynamodb create-table \
-  --endpoint-url http://localhost:8000 \
-  --table-name fleet \
-  --attribute-definitions \
-      AttributeName=PK,AttributeType=S \
-      AttributeName=SK,AttributeType=S \
-  --key-schema \
-      AttributeName=PK,KeyType=HASH \
-      AttributeName=SK,KeyType=RANGE \
-  --provisioned-throughput ReadCapacityUnits=1,WriteCapacityUnits=1
-```
 
 ## Sort Key Design
 
@@ -46,9 +37,23 @@ AWS에서 권장하는 정렬키 설계 모범 예시
 
 정렬키는 선택, 범위 연산인 >,>=,<,<=,begin_withs,between 연산이 가능
 
-## fleet table
+## AWS 권장 키 디자인 방식으로 fleet table 생성
 
 ![img.png](docs/fleettable.png)
+
+```bash
+aws dynamodb create-table \
+  --endpoint-url http://localhost:8000 \
+  --table-name fleet \
+  --attribute-definitions \
+      AttributeName=PK,AttributeType=S \
+      AttributeName=SK,AttributeType=S \
+  --key-schema \
+      AttributeName=PK,KeyType=HASH \
+      AttributeName=SK,KeyType=RANGE \
+  --provisioned-throughput ReadCapacityUnits=1,WriteCapacityUnits=1
+```
+
 {접두사}#{id}
 
 * 파티션키: ASSET#B123
@@ -59,7 +64,38 @@ AWS에서 권장하는 정렬키 설계 모범 예시
 
 # GSI 생성
 
-```
+## 해결하려는 액세스 패턴
+
+**이용자**는 이용 중인 자전거 하나만
+**관리자**는 모든 자전거에 대해 배터리 정보를 궁금해함
+
+배터리 정보는 파티션키도, 정렬키도 아님 or 상태가 OPEN인 항목만 가져오고 싶음
+SCAN해서 모든 테이블의 데이터를 검색 → 많은 비용 발생, 지양해야함
+
+GSI 2개 생성 필요, 하지만 GSI는 최대 20개만 만들 수 있으므로 GSI 생성은 신중해야 한다.
+
+-> `GSI Sparse Index`, `GSI 오버로딩`을 통해 GSI 한 개만 생성해서 두가지 액세스 패턴 모두 만족하자
+
+## GSI Sparse Index
+
+![img.png](docs/sparseidx.png)
+상태가 LOW_BATTERY인 경우에만 속성을 추가한다. 충전을 완료할 경우 속성을 제거한다.
+
+- 값이 있는 경우에만 데이터를 가져오므로 글로벌 보조 인덱스 사이즈가 줄음 → 비용절감
+  - 이경우 sparse index라고 함
+
+## GSI 오버로딩
+
+여러 항목 유형의 공통 속성을 인덱싱해 가급적 GSI를 신규 생성하지 않고 기존 인덱스를 사용하는 방식
+![img.png](docs/gsiover.png)
+
+배터리 부족 액세스 패턴과 미해결 서비스 주문 액세스 패턴은 공통 특성을 공유한다.
+우리가 원하는 것은 작은 항목 하위 집합의 레코드만 반환하는 것
+
+애플리케이션 레벨에서 fleet 테이블의 GSI1_PK 컬럼에 데이터를 써주고 그걸 GSI1 에서 파티션 키로 씀
+
+## GSI Update 문
+```bash
 aws dynamodb update-table \
   --endpoint-url http://localhost:8000 \
   --table-name fleet \
@@ -92,62 +128,34 @@ aws dynamodb update-table \
 ]
 '
 ```
+> 위 명령 후 기존 데이터들 중 특정 조건에 대해 `GSI1_PK` 속성 업데이트를 하고자 한다면 병렬 스캔(Parallel Scan)한 뒤,
+해당 아이템들의 `GSI1_PK` 속성을 일괄 업데이트 필요
 
-ProjectionType은 인덱스에 어떤 정보를 저장할지 지정하는 옵션
+`ProjectionType`은 인덱스에 어떤 정보를 저장할지 지정하는 옵션
 
 * ALL : 모든 속성
 * KEYS_ONLY : 키만 포함
 * INCLUDE : 일부 속성만 포함
 
-## 해결하려는 액세스 패턴
-
-**이용자**는 이용 중인 자전거 하나만
-**관리자**는 모든 자전거에 대해 배터리 정보를 궁금해함
-
-배터리 정보는 파티션키도, 정렬키도 아님 or 상태가 OPEN인 항목만 가져오고 싶음
-SCAN해서 모든 테이블의 데이터를 검색 → 많은 비용 발생, 지양해야함
-
-GSI 2개 생성 필요, 하지만 GSI는 최대 20개만 만들 수 있으므로 GSI 생성은 신중해야 한다.
-
--> `GSI Sparse Index`, `GSI 오버로딩`을 통해 GSI 한 개만 생성해서 두가지 액세스 패턴 모두 만족하자
-
-## GSI Sparse Index
-
-![img.png](docs/sparseidx.png)
-상태가 LOW_BATTERY인 경우에만 속성을 추가한다. 충전을 완료할 경우 속성을 제거한다.
-
-- 값이 있는 경우에만 데이터를 가져오므로 글로벌 보조 인덱스 사이즈가 줄음 → 비용절감
-    - 이경우 sparse index라고 함
-
-## GSI 오버로딩
-
-여러 항목 유형의 공통 속성을 인덱싱해 가급적 GSI를 신규 생성하지 않고 기존 인덱스를 사용하는 방식
-![img.png](docs/gsiover.png)
-
-배터리 부족 액세스 패턴과 미해결 서비스 주문 액세스 패턴은 공통 특성을 공유한다.
-우리가 원하는 것은 작은 항목 하위 집합의 레코드만 반환하는 것
-
-애플리케이션 레벨에서 fleet 테이블의 GSI1_PK 컬럼에 데이터를 써주고 그걸 GSI1 에서 파티션 키로 씀
-
 # 정보 조회
 
 ## 테이블 목록 조회
 
-```
+```bash
 aws dynamodb list-tables --endpoint-url http://localhost:8000
 ```
 
 ## 테이블 정보 조회
 
-```
+```bash
 aws dynamodb describe-table --table-name fleet  --endpoint-url http://localhost:8000
 ```
 
 ## LOW_BATTERY 항목 조회
 
-### 테이블에서 스캔해서 LOW_BATTERY 항목 가져오기
+### 테이블을 스캔하면서, 특정 조건(GSI1_PK = "LOW_BATTERY")을 만족하는 아이템의 개수를 가져오기
 
-```
+```bash
 aws dynamodb scan \
   --endpoint-url http://localhost:8000 \
   --table-name fleet \
@@ -159,7 +167,7 @@ aws dynamodb scan \
 
 ### GSI Sparse Index 통해 LOW_BATTERY 항목 조회
 
-```
+```bash
 aws dynamodb query \
   --endpoint-url http://localhost:8000 \
   --table-name fleet \
@@ -182,19 +190,19 @@ ServiceStatus: "OPEN"
 
 ### 테이블 스캔
 
-```
+```bash
 aws dynamodb query \
   --endpoint-url http://localhost:8000 \
   --table-name fleet \
   --key-condition-expression "PK = :pk and begins_with(SK, :sk)" \
-  --filter-expression "ServiceStatus = :servicestatus" \
+  --filter-expression "serviceStatus = :servicestatus" \
   --expression-attribute-values '{":pk": { "S": "ASSET#...."}, ":sk": { "S": "SERVICE#" },":servicestatus": { "S": "OPEN"} }' \
   --query 'Items'
 ```
 
 ### GSI 인덱스 쿼리
 
-```
+```bash
 aws dynamodb query \
   --endpoint-url http://localhost:8000 \
   --table-name fleet \

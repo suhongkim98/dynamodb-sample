@@ -1,0 +1,11 @@
+spring:
+  cloud:
+    aws:
+      dynamodb:
+        endpoint: http://localhost:8000
+
+springdoc:
+  api-docs:
+    path: /docs
+  swagger-ui:
+    path: /docs/index.html
