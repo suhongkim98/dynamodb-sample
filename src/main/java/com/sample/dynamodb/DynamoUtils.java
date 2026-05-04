@@ -15,4 +15,8 @@ public class DynamoUtils {
         }
         return key.toString();
     }
+
+    public static String getId(String key) {
+        return key.split(KEY_SPLITTER)[1];
+    }
 }

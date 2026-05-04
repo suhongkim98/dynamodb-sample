@@ -6,10 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttribute;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.*;
 
 @Data
 @Builder
@@ -18,7 +15,7 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortK
 @DynamoDbBean
 public class AssetDynamoEntity {
 
-    private static final String KEY_PREFIX = "ASSET";
+    private static final String ASSET_KEY_PREFIX = "ASSET";
 
     private String pk;
     private String sk;
@@ -38,11 +35,13 @@ public class AssetDynamoEntity {
 
     @DynamoDbSortKey
     @DynamoDbAttribute("SK")
+    @DynamoDbSecondarySortKey(indexNames = "GSI1") // 실무에서는 GSI1_SK로 분리하자
     public String getSk() {
         return sk;
     }
 
-    @DynamoDbAttribute("GSI1_PK") // GSI 파티션 키 지정
+    @DynamoDbSecondaryPartitionKey(indexNames = "GSI1") // GSI 파티션 키 지정
+    @DynamoDbAttribute("GSI1_PK")
     public String getGsi1Pk() {
         return gsi1Pk;
     }
@@ -52,8 +51,8 @@ public class AssetDynamoEntity {
         String status = asset.getStatus() != null ? asset.getStatus().toString() : null;
 
         return AssetDynamoEntity.builder()
-                .pk(DynamoUtils.join(KEY_PREFIX, asset.getId()))
-                .sk(DynamoUtils.join(KEY_PREFIX, asset.getId()))
+                .pk(DynamoUtils.join(ASSET_KEY_PREFIX, asset.getId()))
+                .sk(DynamoUtils.join(ASSET_KEY_PREFIX, asset.getId()))
                 .assetType(assetType)
                 .status(status)
                 .battery(asset.getBattery())

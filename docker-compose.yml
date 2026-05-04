@@ -1,6 +1,6 @@
 services:
   dynamodb:
-    image: amazon/dynamodb-local:3.0.0
+    image: amazon/dynamodb-local:3.3.0
     container_name: aws-dynamodb-local
     ports:
       - "8000:8000"

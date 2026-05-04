@@ -196,7 +196,7 @@ aws dynamodb query \
   --table-name fleet \
   --key-condition-expression "PK = :pk and begins_with(SK, :sk)" \
   --filter-expression "serviceStatus = :servicestatus" \
-  --expression-attribute-values '{":pk": { "S": "ASSET#...."}, ":sk": { "S": "SERVICE#" },":servicestatus": { "S": "OPEN"} }' \
+  --expression-attribute-values '{":pk": { "S": "ASSET#에셋아이디"}, ":sk": { "S": "SERVICE#" },":servicestatus": { "S": "OPEN"} }' \
   --query 'Items'
 ```
 
@@ -208,6 +208,6 @@ aws dynamodb query \
   --table-name fleet \
   --index-name GSI1 \
   --key-condition-expression "GSI1_PK = :gsi1_pk" \
-  --expression-attribute-values '{":gsi1_pk":{"S":"OPEN#S76438"}}' \
+  --expression-attribute-values '{":gsi1_pk":{"S":"OPEN"}}' \
   --query 'Items'
 ```

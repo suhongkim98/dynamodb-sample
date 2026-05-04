@@ -8,7 +8,7 @@ import java.util.UUID;
 @Getter
 public class Asset {
 
-    private UUID id;
+    private String id;
     private AssetType assetType;
     private AssetStatus status;
     private int battery;
@@ -16,7 +16,7 @@ public class Asset {
     private double longitude;
 
     @Builder
-    public Asset(UUID id, AssetType assetType, AssetStatus status, int battery, double latitude, double longitude) {
+    public Asset(String id, AssetType assetType, AssetStatus status, int battery, double latitude, double longitude) {
         this.id = id;
         this.assetType = assetType;
         this.status = status;
@@ -25,7 +25,7 @@ public class Asset {
         this. longitude = longitude;
 
         if (this.id == null) {
-            this.id = UUID.randomUUID();
+            this.id = UUID.randomUUID().toString();
         }
         if (this.status == null) {
             this.status = AssetStatus.AVAILABLE;
